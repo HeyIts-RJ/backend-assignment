@@ -1,7 +1,6 @@
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.lang.instrument.Instrumentation;
 import java.sql.*;
 import java.util.Date;
 import java.util.Scanner;
@@ -31,7 +30,7 @@ public class Datastore {
                 stmt = connection.createStatement();
                 sql = "CREATE TABLE " + DatastoreContract.DBEntry.TABLE_NAME + " " +
                         "(" + DatastoreContract.DBEntry._ID + " INTEGER PRIMARY KEY AUTOINCREMENT," +
-                        " " + DatastoreContract.DBEntry.Key + " TEXT NOT NULL, " +
+                        " " + DatastoreContract.DBEntry.Key + " TEXT NOT NULL UNIQUE, " +
                         " " + DatastoreContract.DBEntry.Value + " TEXT, " +
                         " " + DatastoreContract.DBEntry.TTL + " INTEGER," +
                         " " + DatastoreContract.DBEntry.Dated + " TEXT) ";
@@ -72,6 +71,71 @@ public class Datastore {
         }
     }
 
+    public JSONObject read(String key) {
+        try {
+            stmt = connection.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + DatastoreContract.DBEntry.TABLE_NAME + " WHERE " + DatastoreContract.DBEntry.Key + "='" + key + "';");
+            while (rs.next()) {
+                int ttl = rs.getInt(DatastoreContract.DBEntry.TTL);
+                if (ttl != 0) {
+                    long createdTime = Long.parseLong(rs.getString(DatastoreContract.DBEntry.Dated));
+                    long currentTime = new Date().getTime();
+                    if (((currentTime - createdTime) / 60) < ttl)
+                        return new JSONObject(rs.getString(DatastoreContract.DBEntry.Value));
+                    else
+                        return null;
+                } else {
+                    return new JSONObject(rs.getString(DatastoreContract.DBEntry.Value));
+                }
+            }
+            stmt.close();
+        } catch (SQLException | JSONException throwables) {
+            throwables.printStackTrace();
+        }
+        return null;
+    }
+
+    boolean isTTL(String key) {
+        try {
+            stmt = connection.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + DatastoreContract.DBEntry.TABLE_NAME + " WHERE " + DatastoreContract.DBEntry.Key + "='" + key + "';");
+            while (rs.next()) {
+                int ttl = rs.getInt(DatastoreContract.DBEntry.TTL);
+                if (ttl != 0) {
+                    long createdTime = Long.parseLong(rs.getString(DatastoreContract.DBEntry.Dated));
+                    long currentTime = new Date().getTime();
+                    if (((currentTime - createdTime) / 60) < ttl)
+                        return true;
+                    else
+                        return false;
+                } else {
+                    return true;
+                }
+            }
+            stmt.close();
+        } catch (SQLException throwables) {
+            throwables.printStackTrace();
+        }
+        return false;
+    }
+
+    public boolean delete(String key) {
+        try {
+            if (isTTL(key)) {
+                stmt = connection.createStatement();
+                int rs = stmt.executeUpdate("DELETE FROM " + DatastoreContract.DBEntry.TABLE_NAME + " WHERE " + DatastoreContract.DBEntry.Key + "='" + key + "';");
+                stmt.close();
+                if (rs == 0) return false;
+                else return true;
+            } else {
+                return false;
+            }
+        } catch (SQLException throwables) {
+            throwables.printStackTrace();
+        }
+        return false;
+    }
+
     public static void main(String[] args) throws JSONException {
         Datastore datastore = new Datastore();
         Scanner scanner = new Scanner(System.in);
@@ -96,14 +160,42 @@ public class Datastore {
                     value = scanner.next();
 
                     if (createChoice == 1) {
-                        datastore.create(key, new JSONObject(value));
+                        try {
+                            datastore.create(key, new JSONObject(value));
+                        } catch (JSONException e) {
+                            System.out.println("Incorrect JSON Format!");
+                        }
                     } else if (createChoice == 2) {
                         System.out.println("Enter TTL (in seconds): ");
                         ttl = scanner.nextInt();
-                        datastore.create(key, new JSONObject(value), ttl);
+                        try {
+                            datastore.create(key, new JSONObject(value), ttl);
+                        } catch (JSONException e) {
+                            System.out.println("Incorrect JSON Format!");
+                        }
                     } else {
                         System.out.println("Invalid choice!");
                     }
+                    break;
+                case 2:
+                    System.out.println("Enter Key to read: ");
+                    String searchKey;
+                    searchKey = scanner.next();
+                    JSONObject searchValue = datastore.read(searchKey);
+                    if (searchValue != null) {
+                        System.out.println(searchValue.toString());
+                    } else {
+                        System.out.println("Key does not exists or expired!");
+                    }
+                    break;
+                case 3:
+                    System.out.println("Enter Key to delete: ");
+                    String deleteKey;
+                    deleteKey = scanner.next();
+                    if (datastore.delete(deleteKey))
+                        System.out.println("Key deleted successfully!");
+                    else
+                        System.out.println("Key does not exists or expired!");
                     break;
                 case 4:
                     System.exit(0);

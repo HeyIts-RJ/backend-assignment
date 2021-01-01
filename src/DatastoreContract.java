@@ -2,6 +2,9 @@ public class DatastoreContract {
     DatastoreContract() {
     }
 
+    /**
+     * Used for Dependency injection for the Datastore
+     */
     public static final class DBEntry implements BaseColumns {
         final static String TABLE_NAME = "DataStore";
 
