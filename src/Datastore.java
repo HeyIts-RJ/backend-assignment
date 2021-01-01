@@ -30,7 +30,7 @@ public class Datastore {
                 stmt = connection.createStatement();
                 sql = "CREATE TABLE " + DatastoreContract.DBEntry.TABLE_NAME + " " +
                         "(" + DatastoreContract.DBEntry._ID + " INTEGER PRIMARY KEY AUTOINCREMENT," +
-                        " " + DatastoreContract.DBEntry.Key + " TEXT NOT NULL UNIQUE, " +
+                        " " + DatastoreContract.DBEntry.Key + " TEXT NOT NULL, " +
                         " " + DatastoreContract.DBEntry.Value + " TEXT, " +
                         " " + DatastoreContract.DBEntry.TTL + " INTEGER," +
                         " " + DatastoreContract.DBEntry.Dated + " TEXT) ";
@@ -43,18 +43,22 @@ public class Datastore {
         }
     }
 
-    public void create(String key, JSONObject value) {
+    public boolean create(String key, JSONObject value) {
         try {
-            long dated = new Date().getTime();
-            stmt = connection.createStatement();
-            sql = "INSERT INTO " + DatastoreContract.DBEntry.TABLE_NAME + " (" + DatastoreContract.DBEntry.Key + "," + DatastoreContract.DBEntry.Value + "," + DatastoreContract.DBEntry.Dated + ") " +
-                    "VALUES ('" + key + "','" +
-                    value.toString() + "','" + String.valueOf(dated) + "')";
-            stmt.executeUpdate(sql);
-            stmt.close();
+            if (!isKeyExists(key)) {
+                long dated = new Date().getTime();
+                stmt = connection.createStatement();
+                sql = "INSERT INTO " + DatastoreContract.DBEntry.TABLE_NAME + " (" + DatastoreContract.DBEntry.Key + "," + DatastoreContract.DBEntry.Value + "," + DatastoreContract.DBEntry.Dated + ") " +
+                        "VALUES ('" + key + "','" +
+                        value.toString() + "','" + String.valueOf(dated) + "')";
+                stmt.executeUpdate(sql);
+                stmt.close();
+                return true;
+            } else return false;
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        return false;
     }
 
     public void create(String key, JSONObject value, Integer ttl) {
@@ -119,6 +123,21 @@ public class Datastore {
         return false;
     }
 
+    boolean isKeyExists(String key) {
+        try {
+            stmt = connection.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + DatastoreContract.DBEntry.TABLE_NAME + " WHERE " + DatastoreContract.DBEntry.Key + "='" + key + "';");
+            stmt.close();
+            if (rs.next()) {
+                return false;
+            } else
+                return true;
+        } catch (SQLException throwables) {
+            throwables.printStackTrace();
+        }
+        return false;
+    }
+
     public boolean delete(String key) {
         try {
             if (isTTL(key)) {
@@ -161,7 +180,9 @@ public class Datastore {
 
                     if (createChoice == 1) {
                         try {
-                            datastore.create(key, new JSONObject(value));
+                            if (datastore.create(key, new JSONObject(value)))
+                                System.out.println("Key-value created successfully!");
+                            else System.out.println("Key already exists!");
                         } catch (JSONException e) {
                             System.out.println("Incorrect JSON Format!");
                         }
